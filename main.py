@@ -6,45 +6,44 @@ from datetime import datetime
 
 app = FastAPI()
 
-class DateRequest(BaseModel):
-    dates: List[str]
 
-def format_calendar(dates: List[str]) -> str:
-    # Преобразуем строки в объекты datetime
-    dt_objects = [datetime.strptime(date_str, "%d-%m-%Y") for date_str in dates]
-    if not dt_objects:
-        return "Нет дат для отображения"
+class DateList(BaseModel):
+    dates: List[str]  # Формат: ["14-03-2025", "20-03-2025"]
 
-    # Определяем месяц и год по первой дате
-    target_month = dt_objects[0].month
-    target_year = dt_objects[0].year
 
-    # Получаем все дни месяца
-    cal = calendar.Calendar(firstweekday=0)  # Начинается с Понедельника (0 - понедельник)
+@app.post("/calendar")
+def generate_calendar(date_list: DateList):
+    # Преобразуем строки в datetime format
+    parsed_dates = [datetime.strptime(d, "%d-%m-%Y") for d in date_list.dates]
+    if not parsed_dates:
+        return {"error": "No dates provided"}
+
+    # Предполагаем, что все даты относятся к одному месяцу
+    target_year = parsed_dates[0].year
+    target_month = parsed_dates[0].month
+
+    # Создаем календарь месяца
+    cal = calendar.Calendar()
     month_days = cal.monthdayscalendar(target_year, target_month)
 
-    # Преобразуем даты в set номеров дней
-    active_days = {dt.day for dt in dt_objects if dt.month == target_month and dt.year == target_year}
+    # Создаем множество дней с галочкой
+    check_days = set(d.day for d in parsed_dates)
 
-    # Шапка календаря
-    header = f"Календарь активностей для {target_year}-{target_month:02d}:\n"
-    days_header = "Пн Вт Ср Чт Пт Сб Вс\n"
+    # Строка заголовка
+    result = f"Календарь активностей для {target_year}-{str(target_month).zfill(2)}:\n"
+    result += "Пн Вт Ср Чт Пт Сб Вс\n"
 
-    body = ""
+    # Формируем строки с днями
     for week in month_days:
-        line = ""
         for day in week:
             if day == 0:
-                line += "   "
-            elif day in active_days:
-                line += "✅ "
+                result += "   "
+            elif day in check_days:
+                result += "✅ "
+            elif day < 10:
+                result += f" {day} "
             else:
-                line += f"{day:2} "
-        body += line.rstrip() + "\n"
+                result += f"{day} "
+        result += "\n"
 
-    return header + days_header + body.strip()
-
-@app.post("/calendar/")
-async def generate_calendar(req: DateRequest):
-    result = format_calendar(req.dates)
     return {"calendar": result}
